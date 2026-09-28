@@ -1,0 +1,20 @@
+name: Build APK
+on: [push, workflow_dispatch]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Setup Gradle
+        run: gradle wrapper --gradle-version 8.5
+      - name: Build
+        run: ./gradlew assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cemu-apk
+          path: app/build/outputs/apk/debug/*.apk
