@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>极简测亩</title>
+<style>
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+body { margin:0; font-family: system-ui, sans-serif; background:#111; color:#eee;
+       font-size:18px; padding-bottom:30px; }
+.header { padding:14px; text-align:center; font-size:22px; background:#222;
+          font-weight:bold; letter-spacing:2px; }
+.tabs { display:flex; background:#1a1a1a; }
+.tabs button { flex:1; padding:16px; font-size:18px; border:none;
+               background:transparent; color:#888; border-bottom:3px solid transparent; }
+.tabs button.active { color:#4caf50; border-bottom-color:#4caf50; font-weight:bold; }
+.page { display:none; }
+.page.active { display:block; }
+.modes { display:flex; gap:10px; padding:12px; }
+.modes button { flex:1; padding:16px; font-size:18px; border:none;
+                border-radius:10px; background:#2a2a2a; color:#888; font-weight:bold; }
+.modes button.active { background:#4caf50; color:#fff; }
+.row { display:flex; align-items:center; gap:10px; padding:8px 14px; color:#aaa; }
+.row input, .row select { flex:1; padding:14px; font-size:18px; border-radius:10px;
+    border:1px solid #333; background:#1a1a1a; color:#fff; text-align:center; }
+.area { font-size:72px; font-weight:bold; color:#4caf50; text-align:center;
+        margin:14px 0 0; line-height:1; }
+.unit { font-size:24px; color:#888; font-weight:normal; }
+.sub { text-align:center; font-size:18px; color:#888; margin:8px 0 12px; }
+.price { text-align:center; font-size:28px; color:#ffc107; font-weight:bold; margin:8px 0; }
+.info { display:flex; justify-content:space-around; padding:10px; font-size:16px; color:#999; }
+.quality { text-align:center; padding:8px; font-size:16px; font-weight:bold; color:#666; }
+.q-good { color:#4caf50; } .q-mid { color:#ffc107; } .q-bad { color:#f44336; }
+canvas { width:100%; height:280px; background:#181818; display:block; }
+.status { text-align:center; padding:12px; font-size:16px; color:#ff9800; min-height:24px; }
+.buttons { display:flex; gap:12px; padding:14px; }
+.buttons button { flex:1; padding:22px; font-size:22px; border:none;
+    border-radius:14px; background:#333; color:#fff; font-weight:bold; }
+.buttons button.start { background:#4caf50; }
+.buttons button.stop { background:#f44336; }
+.buttons button:disabled { opacity:0.3; }
+.rec-item { display:flex; align-items:center; padding:18px; border-bottom:1px solid #222; }
+.rec-main { flex:1; }
+.rec-area { font-size:32px; font-weight:bold; color:#4caf50; }
+.rec-area span { font-size:16px; color:#888; font-weight:normal; }
+.rec-meta { font-size:15px; color:#888; margin-top:6px; }
+.empty { text-align:center; padding:60px; color:#555; font-size:18px; }
+.back-btn { margin:12px; padding:16px 22px; font-size:18px; border:none;
+    border-radius:10px; background:#2a2a2a; color:#eee; }
+</style>
+</head>
+<body>
+<div class="header">极简测亩</div>
+<div class="tabs">
+  <button class="tab active" data-page="measure">测 量</button>
+  <button class="tab" data-page="history">记 录</button>
+</div>
+
+<div id="measurePage" class="page active">
+  <div class="modes">
+    <button id="modeCar" class="active">🚜 车载</button>
+    <button id="modeHand">🚶 手持</button>
+  </div>
+  <div class="row" id="widthRow">
+    <span>车宽</span>
+    <input id="widthInput" type="number" value="4" step="0.1" min="0.5" max="30">
+    <span>米</span>
+  </div>
+  <div class="row">
+    <span>单价</span>
+    <input id="priceInput" type="number" value="0" step="1" min="0">
+    <span>元/亩</span>
+  </div>
+  <div class="row">
+    <span>精度</span>
+    <select id="qualitySelect">
+      <option value="5" selected>极高（≤5米）</option>
+      <option value="8">高（≤8米）</option>
+      <option value="15">标准</option>
+      <option value="30">宽松</option>
+    </select>
+  </div>
+  <div class="area"><span id="area">0.00</span><span class="unit"> 亩</span></div>
+  <div class="sub"><span id="areaM2">0</span> 平方米</div>
+  <div class="price" id="priceText"></div>
+  <div class="info">
+    <div>点数 <span id="count">0</span></div>
+    <div>里程 <span id="distance">0</span>米</div>
+    <div>模式 <span id="rtkStatus">GPS</span></div>
+  </div>
+  <div class="quality" id="qualityLabel">等待定位…</div>
+  <canvas id="canvas"></canvas>
+  <div class="status" id="status">车载：设车宽 → 开始 → 随便开 → 结束</div>
+  <div class="buttons">
+    <button id="startBtn" class="start">开始</button>
+    <button id="stopBtn" class="stop" disabled>结束</button>
+    <button id="clearBtn">清零</button>
+  </div>
+  <div style="padding:12px; text-align:center;">
+    <button id="rtkBtn" style="padding:14px 24px; border-radius:10px;
+      border:none; background:#2196f3; color:#fff; font-size:16px;">连接蓝牙RTK</button>
+  </div>
+</div>
+
+<div id="historyPage" class="page">
+  <div id="historyListView"><div id="historyList"></div></div>
+  <div id="historyDetailView" style="display:none">
+    <button id="backBtn" class="back-btn">← 返回</button>
+    <div class="area"><span id="detailArea">0.00</span><span class="unit"> 亩</span></div>
+    <div class="sub"><span id="detailInfo"></span></div>
+    <canvas id="detailCanvas"></canvas>
+    <div class="buttons">
+      <button id="deleteBtn" class="stop">删除</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const R = 6378137.0, STORAGE = 'cemu_recs_v1', MAX_SAVE = 3000;
+
+let mode = 'car';
+let carWidth = 4;
+let pricePerMu = 0;
+let qualityLimit = 5;
+let measuring = false;
+let points = [];
+let records = [];
+let currentDetailId = null;
+let mainCtx = null, detailCtx = null;
+
+function initCanvas(c) {
+  const dpr = window.devicePixelRatio || 1;
+  c.width = c.clientWidth * dpr;
+  c.height = c.clientHeight * dpr;
+  const ctx = c.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return ctx;
+}
+
+function drawPlot(ctx, canvas, pts, drawMode, width) {
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  ctx.clearRect(0, 0, W, H);
+  if (!pts || pts.length < 2) {
+    ctx.fillStyle = '#444'; ctx.font = '16px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText('暂无轨迹', W/2, H/2);
+    return;
+  }
+  const p0 = pts[0];
+  const lat0 = p0.lat * Math.PI / 180;
+  const proj = pts.map(p => ({
+    x: R * (p.lon - p0.lon) * Math.PI / 180 * Math.cos(lat0),
+    y: R * (p.lat - p0.lat) * Math.PI / 180
+  }));
+  let minX=1e30, maxX=-1e30, minY=1e30, maxY=-1e30;
+  for (const p of proj) {
+    if (p.x<minX) minX=p.x; if (p.x>maxX) maxX=p.x;
+    if (p.y<minY) minY=p.y; if (p.y>maxY) maxY=p.y;
+  }
+  const hw = drawMode === 'car' ? width/2 : 0;
+  minX -= hw; maxX += hw; minY -= hw; maxY += hw;
+  const rx = Math.max(maxX-minX, 1), ry = Math.max(maxY-minY, 1);
+  const pad = 24;
+  const scale = Math.min((W-pad*2)/rx, (H-pad*2)/ry);
+  const offX = pad + (W-pad*2 - rx*scale)/2;
+  const offY = pad + (H-pad*2 - ry*scale)/2;
+  const toXY = p => ({
+    x: offX + (p.x-minX)*scale,
+    y: H - offY - (p.y-minY)*scale
+  });
+  if (drawMode === 'car') {
+    ctx.strokeStyle = 'rgba(76,175,80,0.8)';
+    ctx.lineWidth = Math.max(3, width*scale);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath();
+    const s = toXY(proj[0]); ctx.moveTo(s.x, s.y);
+    for (let i=1; i<proj.length; i++) {
+      const p = toXY(proj[i]); ctx.lineTo(p.x, p.y);
+    }
+    ctx.stroke();
+  } else {
+    ctx.beginPath();
+    const s = toXY(proj[0]); ctx.moveTo(s.x, s.y);
+    for (let i=1; i<proj.length; i++) {
+      const p = toXY(proj[i]); ctx.lineTo(p.x, p.y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(76,175,80,0.25)'; ctx.fill();
+    ctx.strokeStyle = '#4caf50'; ctx.lineWidth = 3; ctx.stroke();
+  }
+  const st = toXY(proj[0]);
+  ctx.beginPath(); ctx.arc(st.x, st.y, 7, 0, Math.PI*2);
+  ctx.fillStyle = '#ff9800'; ctx.fill();
+}
+
+function updateArea(areaM2, distance, count) {
+  const mu = areaM2 / 666.6667;
+  $('area').textContent = mu >= 100 ? mu.toFixed(1) : mu.toFixed(2);
+  $('areaM2').textContent = Math.round(areaM2).toLocaleString();
+  $('distance').textContent = Math.round(distance);
+  $('count').textContent = count;
+  if (pricePerMu > 0) {
+    const total = mu * pricePerMu;
+    $('priceText').textContent = '总价：' + total.toFixed(2) + ' 元';
+  } else {
+    $('priceText').textContent = '';
+  }
+}
+
+window.onNativeLocation = function(lat, lon, acc, areaM2, distance, count) {
+  updateArea(areaM2, distance, count);
+  if (acc <= 5) { $('qualityLabel').textContent = '● 精度极好 ' + acc.toFixed(1) + ' 米'; $('qualityLabel').className = 'quality q-good'; }
+  else if (acc <= 10) { $('qualityLabel').textContent = '● 精度良好 ' + acc.toFixed(1) + ' 米'; $('qualityLabel').className = 'quality q-good'; }
+  else if (acc <= qualityLimit) { $('qualityLabel').textContent = '● 精度一般 ' + acc.toFixed(1) + ' 米'; $('qualityLabel').className = 'quality q-mid'; }
+  else { $('qualityLabel').textContent = '● 精度差 ' + acc.toFixed(1) + ' 米'; $('qualityLabel').className = 'quality q-bad'; }
+  points.push({ lat, lon });
+  if (points.length > MAX_SAVE) points = points.slice(-MAX_SAVE);
+  if (mainCtx) drawPlot(mainCtx, $('canvas'), points, mode, carWidth);
+};
+window.onRtkError = function(msg) {
+  $('status').textContent = 'RTK 错误：' + msg;
+};
+
+function start() {
+  points = [];
+  measuring = true;
+  $('startBtn').disabled = true;
+  $('stopBtn').disabled = false;
+  $('modeCar').disabled = true;
+  $('modeHand').disabled = true;
+  $('widthInput').disabled = true;
+  $('qualitySelect').disabled = true;
+  $('status').textContent = '测量中…';
+  window.Android.startMeasure(mode === 'car' ? 1 : 0, carWidth, qualityLimit);
+  window.Android.speak('开始测量');
+}
+
+function stop() {
+  measuring = false;
+  window.Android.stopMeasure();
+  $('startBtn').disabled = false;
+  $('stopBtn').disabled = true;
+  $('modeCar').disabled = false;
+  $('modeHand').disabled = false;
+  $('widthInput').disabled = false;
+  $('qualitySelect').disabled = false;
+  const areaM2 = window.Android.getArea(mode === 'car' ? 1 : 0);
+  const mu = areaM2 / 666.6667;
+  updateArea(areaM2, window.Android.getDistance(), window.Android.getCount());
+  const track = JSON.parse(window.Android.getTrackJson() || '[]');
+  saveRecord(mu, areaM2, track);
+  window.Android.speak('测量结束，面积' + mu.toFixed(2) + '亩');
+  $('status').textContent = '测量结束，已保存';
+}
+
+function clearAll() {
+  if (measuring) stop();
+  window.Android.clear();
+  points = [];
+  updateArea(0, 0, 0);
+  $('qualityLabel').textContent = '等待定位…';
+  $('qualityLabel').className = 'quality';
+  $('status').textContent = '已清零';
+  if (mainCtx) drawPlot(mainCtx, $('canvas'), [], mode, carWidth);
+}
+
+function saveRecord(mu, areaM2, track) {
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const rec = {
+    id: Date.now(),
+    date: d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+
+          ' '+pad(d.getHours())+':'+pad(d.getMinutes()),
+    mode, width: mode === 'car' ? carWidth : null,
+    price: pricePerMu,
+    area: mu, areaM2: areaM2,
+    totalPrice: mu * pricePerMu,
+    points: track
+  };
+  records.unshift(rec);
+  if (records.length > 200) records = records.slice(0, 200);
+  try { localStorage.setItem(STORAGE, JSON.stringify(records)); } catch(e){}
+  renderHistory();
+}
+
+function loadRecords() {
+  try { records = JSON.parse(localStorage.getItem(STORAGE) || '[]'); } catch(e) { records = []; }
+}
+
+function renderHistory() {
+  const list = $('historyList');
+  if (records.length === 0) {
+    list.innerHTML = '<div class="empty">还没有测量记录</div>';
+    return;
+  }
+  list.innerHTML = records.map(r => {
+    const mt = r.mode === 'car' ? '🚜 车载' : '🚶 手持';
+    const wt = r.mode === 'car' && r.width ? ' · 车宽' + r.width + '米' : '';
+    const pt = r.totalPrice > 0 ? ' · ' + r.totalPrice.toFixed(2) + '元' : '';
+    return '<div class="rec-item" data-id="' + r.id + '">' +
+      '<div class="rec-main">' +
+        '<div class="rec-area">' + (r.area >= 100 ? r.area.toFixed(1) : r.area.toFixed(2)) + ' <span>亩</span></div>' +
+        '<div class="rec-meta">' + mt + wt + pt + ' · ' + r.date + '</div>' +
+      '</div><div style="font-size:32px; color:#555;">›</div></div>';
+  }).join('');
+  list.querySelectorAll('.rec-item').forEach(el => {
+    el.addEventListener('click', () => openDetail(parseInt(el.dataset.id)));
+  });
+}
+function openDetail(id) {
+  const r = records.find(x => x.id === id);
+  if (!r) return;
+  currentDetailId = id;
+  $('historyListView').style.display = 'none';
+  $('historyDetailView').style.display = 'block';
+  $('detailArea').textContent = r.area >= 100 ? r.area.toFixed(1) : r.area.toFixed(2);
+  const mt = r.mode === 'car' ? '🚜 车载' : '🚶 手持';
+  const wt = r.mode === 'car' && r.width ? '车宽' + r.width + '米 · ' : '';
+  const pt = r.totalPrice > 0 ? ' · 总价 ' + r.totalPrice.toFixed(2) + ' 元' : '';
+  $('detailInfo').textContent = mt + ' · ' + wt +
+    Math.round(r.areaM2).toLocaleString() + ' 平方米 · ' + r.date + pt;
+  setTimeout(() => {
+    const c = $('detailCanvas');
+    detailCtx = initCanvas(c);
+    if (detailCtx) drawPlot(detailCtx, c, r.points, r.mode, r.width || 4);
+  }, 50);
+}
+
+function closeDetail() {
+  currentDetailId = null;
+  $('historyDetailView').style.display = 'none';
+  $('historyListView').style.display = 'block';
+}
+
+function deleteCurrent() {
+  if (!currentDetailId) return;
+  if (!confirm('确定删除这条记录？')) return;
+  records = records.filter(x => x.id !== currentDetailId);
+  try { localStorage.setItem(STORAGE, JSON.stringify(records)); } catch(e){}
+  renderHistory();
+  closeDetail();
+}
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    $(tab.dataset.page + 'Page').classList.add('active');
+    if (tab.dataset.page === 'measure') {
+      setTimeout(() => {
+        mainCtx = initCanvas($('canvas'));
+        drawPlot(mainCtx, $('canvas'), points, mode, carWidth);
+      }, 30);
+    } else {
+      closeDetail();
+      renderHistory();
+    }
+  });
+});
+
+$('modeCar').addEventListener('click', () => {
+  if (measuring) return;
+  mode = 'car';
+  $('modeCar').classList.add('active');
+  $('modeHand').classList.remove('active');
+  $('widthRow').style.display = 'flex';
+  clearAll();
+  $('status').textContent = '车载：设车宽 → 开始 → 随便开 → 结束';
+});
+$('modeHand').addEventListener('click', () => {
+  if (measuring) return;
+  mode = 'hand';
+  $('modeHand').classList.add('active');
+  $('modeCar').classList.remove('active');
+  $('widthRow').style.display = 'none';
+  clearAll();
+  $('status').textContent = '手持：开始 → 沿边界走一圈 → 回起点 → 结束';
+});
+$('widthInput').addEventListener('change', () => {
+  const v = parseFloat($('widthInput').value);
+  if (v >= 0.5 && v <= 30) carWidth = v;
+  else $('widthInput').value = carWidth;
+});
+$('priceInput').addEventListener('change', () => {
+  pricePerMu = parseFloat($('priceInput').value) || 0;
+  try { localStorage.setItem('cemu_price', String(pricePerMu)); } catch(e){}
+  const areaM2 = window.Android ? window.Android.getArea(mode === 'car' ? 1 : 0) : 0;
+  updateArea(areaM2, 0, 0);
+});
+$('qualitySelect').addEventListener('change', () => {
+  qualityLimit = parseFloat($('qualitySelect').value);
+});
+$('startBtn').addEventListener('click', start);
+$('stopBtn').addEventListener('click', stop);
+$('clearBtn').addEventListener('click', clearAll);
+$('backBtn').addEventListener('click', closeDetail);
+$('deleteBtn').addEventListener('click', deleteCurrent);
+
+$('rtkBtn').addEventListener('click', () => {
+  const devices = JSON.parse(window.Android.listBtDevices() || '[]');
+  if (devices.length === 0) {
+    alert('没有已配对的蓝牙设备，请先在系统设置里配对 RTK 模块');
+    return;
+  }
+  const names = devices.map((d, i) => (i+1) + '. ' + d.name).join('\n');
+  const choice = prompt('选择要连接的 RTK 设备：\n' + names, '1');
+  const idx = parseInt(choice) - 1;
+  if (idx >= 0 && idx < devices.length) {
+    window.Android.connectRtk(devices[idx].addr);
+    $('rtkStatus').textContent = 'RTK';
+    $('status').textContent = '已连接 RTK：' + devices[idx].name;
+  }
+});
+try { pricePerMu = parseFloat(localStorage.getItem('cemu_price') || '0') || 0; } catch(e){}
+$('priceInput').value = pricePerMu;
+
+loadRecords();
+renderHistory();
+setTimeout(() => {
+  mainCtx = initCanvas($('canvas'));
+  drawPlot(mainCtx, $('canvas'), [], mode, carWidth);
+}, 100);
+</script>
+</body>
+</html>
