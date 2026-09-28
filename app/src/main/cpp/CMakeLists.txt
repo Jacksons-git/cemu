@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.22.1)
+project(cemu)
+add_library(cemu SHARED native-lib.c)
+target_compile_options(cemu PRIVATE -O3 -ffast-math -funroll-loops)
+target_link_libraries(cemu log m)
